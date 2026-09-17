@@ -92,7 +92,7 @@ function clearSessionCookie(res) {
   res.setHeader('Set-Cookie', `${COOKIE_NAME}=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax`);
 }
 
-const OPEN_PATHS = new Set(['/login.html', '/login.js', '/style.css', '/api/login']);
+const OPEN_PATHS = new Set(['/login.html', '/login.js', '/style.css', '/logo.png', '/api/login']);
 
 function authMiddleware(req, res, next) {
   if (OPEN_PATHS.has(req.path)) return next();
