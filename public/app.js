@@ -36,8 +36,14 @@ function formatElapsed(ms) {
   return `${pad(h)}:${pad(m)}:${pad(s)}`;
 }
 
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
 function labelMissionType(t) {
-  if (t.missionType === 'Autre') return t.missionAutre || 'Autre';
+  if (t.missionType === 'Autre') return escapeHtml(t.missionAutre || 'Autre');
   return t.missionType;
 }
 
