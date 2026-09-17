@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>Suivi Jockey</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header class="app-header">
+  <div class="header-brand">
+    <img src="logo.png" alt="Mobileo" class="header-logo" />
+    <h1>Suivi Jockey</h1>
+  </div>
+  <button id="btn-logout" class="logout-link">Déconnexion</button>
+</header>
+
+<main id="app">
+
+  <!-- Ecran principal -->
+  <section id="view-home" class="view">
+    <div id="trajet-status-card" class="card"></div>
+
+    <button id="btn-plein" class="btn btn-secondary btn-big">⛽ Faire le plein</button>
+
+    <nav class="home-nav">
+      <button id="btn-go-jour" class="btn btn-outline">📋 Ma journée</button>
+      <button id="btn-go-date" class="btn btn-outline">📅 Consulter une date</button>
+    </nav>
+  </section>
+
+  <!-- Ecran journee / consultation -->
+  <section id="view-jour" class="view hidden">
+    <div class="jour-header">
+      <button id="btn-back-home" class="btn btn-link">← Retour</button>
+      <input type="date" id="input-date" />
+    </div>
+    <div id="jour-summary" class="card"></div>
+    <div id="jour-timeline"></div>
+  </section>
+
+</main>
+
+<!-- Modal fin de trajet -->
+<div id="modal-finish" class="modal hidden">
+  <div class="modal-content">
+    <h2>Terminer le trajet</h2>
+    <form id="form-finish">
+      <label>Type de mission</label>
+      <div class="radio-group" id="mission-type-group">
+        <label class="radio-pill"><input type="radio" name="missionType" value="Citiz" required> Citiz</label>
+        <label class="radio-pill"><input type="radio" name="missionType" value="Controle technique"> Contrôle technique</label>
+        <label class="radio-pill"><input type="radio" name="missionType" value="Autre"> Autre</label>
+      </div>
+      <input type="text" id="mission-autre-input" class="hidden" placeholder="Précisez la mission" />
+
+      <label>Véhicule utilisé</label>
+      <div class="radio-group" id="vehicule-group">
+        <label class="radio-pill"><input type="radio" name="vehicule" value="Relais Citiz" required> Relais Citiz</label>
+        <label class="radio-pill"><input type="radio" name="vehicule" value="Vehicule perso"> Véhicule perso</label>
+        <label class="radio-pill"><input type="radio" name="vehicule" value="Vehicule controle technique"> Véhicule contrôle technique</label>
+      </div>
+
+      <label>Parking payé ?</label>
+      <div class="radio-group">
+        <label class="radio-pill"><input type="radio" name="parkingPaye" value="non" checked> Non</label>
+        <label class="radio-pill"><input type="radio" name="parkingPaye" value="oui"> Oui</label>
+      </div>
+      <input type="number" id="parking-montant-input" class="hidden" step="0.01" min="0" placeholder="Montant (€)" />
+
+      <div class="modal-actions">
+        <button type="button" id="btn-cancel-finish" class="btn btn-outline">Annuler</button>
+        <button type="submit" class="btn btn-primary">Valider</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal plein -->
+<div id="modal-plein" class="modal hidden">
+  <div class="modal-content">
+    <h2>Faire le plein</h2>
+    <form id="form-plein">
+      <label>Véhicule</label>
+      <div class="radio-group">
+        <label class="radio-pill"><input type="radio" name="vehiculePlein" value="Relais Citiz" required> Relais Citiz</label>
+        <label class="radio-pill"><input type="radio" name="vehiculePlein" value="Vehicule perso"> Véhicule perso</label>
+        <label class="radio-pill"><input type="radio" name="vehiculePlein" value="Vehicule controle technique"> Véhicule contrôle technique</label>
+      </div>
+      <label>Montant (€)</label>
+      <input type="number" id="montant-plein-input" step="0.01" min="0" required placeholder="0.00" />
+
+      <div class="modal-actions">
+        <button type="button" id="btn-cancel-plein" class="btn btn-outline">Annuler</button>
+        <button type="submit" class="btn btn-primary">Valider</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
