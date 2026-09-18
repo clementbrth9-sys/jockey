@@ -2,6 +2,7 @@ const state = {
   activeTrajet: null,
   timerInterval: null,
   currentJourDate: null,
+  clockSkewMs: 0, // ecart entre l'horloge du serveur et celle de l'appareil
 };
 
 // --- Helpers ---
@@ -29,7 +30,7 @@ function formatDurationMin(minutes) {
 }
 
 function formatElapsed(ms) {
-  const totalSec = Math.floor(ms / 1000);
+  const totalSec = Math.max(0, Math.floor(ms / 1000));
   const h = Math.floor(totalSec / 3600);
   const m = Math.floor((totalSec % 3600) / 60);
   const s = totalSec % 60;
@@ -215,8 +216,14 @@ async function ensureHomeFresh() {
   refreshTrajetCounter().catch(() => {});
 }
 
+function updateClockSkew(serverNowIso) {
+  if (!serverNowIso) return;
+  state.clockSkewMs = new Date(serverNowIso).getTime() - Date.now();
+}
+
 async function refreshHome() {
-  const { trajet } = await api('/api/trajets/actif');
+  const { trajet, now } = await api('/api/trajets/actif');
+  updateClockSkew(now);
   state.activeTrajet = trajet;
   renderTrajetCard();
 }
@@ -244,7 +251,7 @@ function renderTrajetCard() {
     const debut = new Date(state.activeTrajet.heureDebut).getTime();
     const timerEl = document.getElementById('trajet-timer');
     const tick = () => {
-      timerEl.textContent = formatElapsed(Date.now() - debut);
+      timerEl.textContent = formatElapsed(Date.now() + state.clockSkewMs - debut);
     };
     tick();
     state.timerInterval = setInterval(tick, 1000);
@@ -265,7 +272,8 @@ async function onStartTrajet(e) {
   btn.disabled = true;
   btn.textContent = 'Démarrage…';
   try {
-    const { trajet } = await apiWithNetworkRetry('/api/trajets/start', { method: 'POST' }, btn, 'Démarrage');
+    const { trajet, now } = await apiWithNetworkRetry('/api/trajets/start', { method: 'POST' }, btn, 'Démarrage');
+    updateClockSkew(now);
     state.activeTrajet = trajet;
     renderTrajetCard();
   } catch (err) {

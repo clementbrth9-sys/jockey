@@ -43,7 +43,7 @@ app.post('/api/logout', (req, res) => {
 
 app.get('/api/trajets/actif', async (req, res) => {
   const trajet = await db.getActiveTrajet();
-  res.json({ trajet });
+  res.json({ trajet, now: new Date().toISOString() });
 });
 
 app.post('/api/trajets/start', async (req, res) => {
@@ -51,7 +51,7 @@ app.post('/api/trajets/start', async (req, res) => {
   if (result.error) {
     return res.status(409).json(result);
   }
-  res.json(result);
+  res.json({ ...result, now: new Date().toISOString() });
 });
 
 app.post('/api/trajets/:id/finish', async (req, res) => {
