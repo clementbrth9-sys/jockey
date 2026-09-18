@@ -47,22 +47,35 @@ function labelMissionType(t) {
   return t.missionType;
 }
 
+// --- Icônes (SVG inline, style trait fin) ---
+
+const ICONS = {
+  play: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>',
+  square: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="3"/></svg>',
+  route: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M8 19h7a4 4 0 0 0 0-8H9a4 4 0 0 1 0-8h7"/></svg>',
+  car: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l1.6-4.8A2 2 0 0 1 6.5 7h11a2 2 0 0 1 1.9 1.2L21 13"/><rect x="2" y="13" width="20" height="6" rx="2"/><circle cx="7" cy="19.5" r="1.5"/><circle cx="17" cy="19.5" r="1.5"/></svg>',
+  pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>',
+  ruler: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19L19 4"/><path d="M7.5 15.5L9 17"/><path d="M11 12l1.5 1.5"/><path d="M14.5 8.5L16 10"/></svg>',
+  building: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="1"/><path d="M9 22v-4a3 3 0 0 1 6 0v4"/></svg>',
+  clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>',
+};
+
 // --- Gamification (légère et discrète) ---
 
 const POSITIVE_MESSAGES = [
-  'Trajet enregistré, bravo ! 👍',
-  'Encore un de fait ✅',
+  'Trajet enregistré, bravo.',
+  'Encore un de fait.',
   'Nickel, trajet noté.',
   'Bien joué, c\'est enregistré.',
-  'Trajet bouclé, au suivant !',
-  'C\'est noté, merci !',
+  'Trajet bouclé, au suivant.',
+  'C\'est noté, merci.',
 ];
 
 const SAFETY_MESSAGES = [
-  'Pense à boucler ta ceinture 🚗',
+  'Pense à boucler ta ceinture.',
   'Pas de tél au volant, on souffle 2 min si besoin.',
   'Fatigue = pause, même 5 min ça compte.',
-  'Une gorgée d\'eau, ça fait pas de mal 💧',
+  'Une gorgée d\'eau, ça fait pas de mal.',
   'Doucement sur les ronds-points, on a le temps.',
 ];
 
@@ -222,11 +235,11 @@ function renderTrajetCard() {
   clearInterval(state.timerInterval);
 
   if (state.activeTrajet) {
-    card.className = 'card trajet-active';
+    card.className = 'hero-card trajet-active';
     card.innerHTML = `
-      <div class="status-label">Trajet en cours</div>
-      <div class="trajet-timer" id="trajet-timer">00:00:00</div>
-      <button id="btn-finish" class="btn btn-danger btn-big">⏹ Terminer le trajet</button>
+      <div class="hero-label">Trajet en cours</div>
+      <div class="hero-timer" id="trajet-timer">00:00:00</div>
+      <button id="btn-finish" class="hero-btn hero-btn-danger">${ICONS.square} Terminer le trajet</button>
     `;
     const debut = new Date(state.activeTrajet.heureDebut).getTime();
     const timerEl = document.getElementById('trajet-timer');
@@ -237,10 +250,10 @@ function renderTrajetCard() {
     state.timerInterval = setInterval(tick, 1000);
     document.getElementById('btn-finish').addEventListener('click', onOpenFinish);
   } else {
-    card.className = 'card trajet-idle';
+    card.className = 'hero-card trajet-idle';
     card.innerHTML = `
-      <div class="status-label">Aucun trajet en cours</div>
-      <button id="btn-start" class="btn btn-primary btn-big">▶ Démarrer un trajet</button>
+      <div class="hero-label">Aucun trajet en cours</div>
+      <button id="btn-start" class="hero-btn hero-btn-primary">${ICONS.play} Démarrer un trajet</button>
     `;
     document.getElementById('btn-start').addEventListener('click', onStartTrajet);
   }
@@ -248,16 +261,16 @@ function renderTrajetCard() {
 
 async function onStartTrajet(e) {
   const btn = e.currentTarget;
-  const originalText = btn.textContent;
+  const originalHTML = btn.innerHTML;
   btn.disabled = true;
   btn.textContent = 'Démarrage…';
   try {
-    const { trajet } = await apiWithNetworkRetry('/api/trajets/start', { method: 'POST' }, btn, originalText);
+    const { trajet } = await apiWithNetworkRetry('/api/trajets/start', { method: 'POST' }, btn, 'Démarrage');
     state.activeTrajet = trajet;
     renderTrajetCard();
   } catch (err) {
     btn.disabled = false;
-    btn.textContent = originalText;
+    btn.innerHTML = originalHTML;
     alert('Impossible de démarrer le trajet : ' + err.message);
   }
 }
@@ -386,13 +399,6 @@ document.getElementById('btn-go-jour').addEventListener('click', () => {
   loadJour(today);
 });
 
-document.getElementById('btn-go-date').addEventListener('click', () => {
-  const date = document.getElementById('input-date').value || todayStr();
-  document.getElementById('input-date').value = date;
-  showView('view-jour');
-  loadJour(date);
-});
-
 document.getElementById('btn-back-home').addEventListener('click', () => {
   showView('view-home');
   ensureHomeFresh();
@@ -478,16 +484,16 @@ function renderTimeline(trajets, pleins) {
             <span>${enCours ? '' : formatDurationMin(t.dureeMinutes)}</span>
           </div>
           <div class="timeline-detail">
-            <span>🚗 ${enCours ? 'Trajet en cours' : labelMissionType(t)}</span>
-            ${t.missionType === 'Livraison' && t.centreLivraison ? `<span>🏭 ${escapeHtml(t.centreLivraison)}</span>` : ''}
-            ${t.vehicule ? `<span>🔑 ${t.vehicule}</span>` : ''}
-            ${t.parkingPaye ? `<span>🅿️ ${t.parkingMontant.toFixed(2)} €</span>` : ''}
-            ${t.km ? `<span>📏 ${t.km} km</span>` : ''}
+            <span>${ICONS.route} ${enCours ? 'Trajet en cours' : labelMissionType(t)}</span>
+            ${t.missionType === 'Livraison' && t.centreLivraison ? `<span>${ICONS.building} ${escapeHtml(t.centreLivraison)}</span>` : ''}
+            ${t.vehicule ? `<span>${ICONS.car} ${t.vehicule}</span>` : ''}
+            ${t.parkingPaye ? `<span>${ICONS.pin} ${t.parkingMontant.toFixed(2)} €</span>` : ''}
+            ${t.km ? `<span>${ICONS.ruler} ${t.km} km</span>` : ''}
           </div>
         </div>
       `;
       if (gapAfter[t.id]) {
-        html += `<div class="timeline-item gap">⏳ Temps mort : ${formatDurationMin(gapAfter[t.id])}</div>`;
+        html += `<div class="timeline-item gap">${ICONS.clock} Temps mort : ${formatDurationMin(gapAfter[t.id])}</div>`;
       }
     } else {
       const p = e.data;
@@ -497,7 +503,7 @@ function renderTimeline(trajets, pleins) {
             <span>${formatTime(p.heure)} · Plein</span>
             <span>${p.montant.toFixed(2)} €</span>
           </div>
-          <div class="timeline-detail"><span>🔑 ${p.vehicule}</span></div>
+          <div class="timeline-detail"><span>${ICONS.car} ${p.vehicule}</span></div>
         </div>
       `;
     }
