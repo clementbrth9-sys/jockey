@@ -1,7 +1,7 @@
 {
   "name": "outil-jockey",
   "version": "1.0.0",
-  "description": "Suivi d'activite quotidienne pour jockey (trajets et pleins)",
+  "description": "MobiTrack - suivi d'activite quotidienne pour jockey (trajets et pleins)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

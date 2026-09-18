@@ -98,7 +98,7 @@ app.get('/api/pleins', async (req, res) => {
 db.init()
   .then(() => {
     app.listen(PORT, () => {
-      console.log(`Outil jockey demarre sur http://localhost:${PORT}`);
+      console.log(`MobiTrack demarre sur http://localhost:${PORT}`);
     });
   })
   .catch((err) => {
