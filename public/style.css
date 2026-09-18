@@ -76,6 +76,13 @@ svg {
   white-space: nowrap;
 }
 
+.app-footer {
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  padding: 20px 16px 28px;
+}
+
 .icon-btn {
   display: flex;
   align-items: center;
