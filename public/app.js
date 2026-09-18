@@ -47,11 +47,68 @@ function labelMissionType(t) {
   return t.missionType;
 }
 
-async function api(url, options) {
-  const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  });
+// --- Gamification (légère et discrète) ---
+
+const POSITIVE_MESSAGES = [
+  'Trajet enregistré, bravo ! 👍',
+  'Encore un de fait ✅',
+  'Nickel, trajet noté.',
+  'Bien joué, c\'est enregistré.',
+  'Trajet bouclé, au suivant !',
+  'C\'est noté, merci !',
+];
+
+const SAFETY_MESSAGES = [
+  'Pense à boucler ta ceinture 🚗',
+  'Pas de tél au volant, on souffle 2 min si besoin.',
+  'Fatigue = pause, même 5 min ça compte.',
+  'Une gorgée d\'eau, ça fait pas de mal 💧',
+  'Doucement sur les ronds-points, on a le temps.',
+];
+
+let lastMessage = null;
+function pickMessage(pool) {
+  if (pool.length === 1) return pool[0];
+  let msg;
+  do {
+    msg = pool[Math.floor(Math.random() * pool.length)];
+  } while (msg === lastMessage);
+  lastMessage = msg;
+  return msg;
+}
+
+let toastTimeout = null;
+function showToast(message) {
+  const toast = document.getElementById('toast');
+  clearTimeout(toastTimeout);
+  toast.textContent = message;
+  toast.classList.remove('hidden');
+  toastTimeout = setTimeout(() => toast.classList.add('hidden'), 3500);
+}
+
+function showPostTrajetMessage() {
+  const showSafety = Math.random() < 0.22; // environ 1 fois sur 4-5
+  const pool = showSafety ? SAFETY_MESSAGES : POSITIVE_MESSAGES;
+  showToast(pickMessage(pool));
+}
+
+// --- Réseau (avec timeout + tolérance aux réveils de serveur lents) ---
+
+async function api(url, options = {}, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  let res;
+  try {
+    res = await fetch(url, {
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      ...options,
+    });
+  } catch (err) {
+    throw Object.assign(new Error('CONNEXION_IMPOSSIBLE'), { networkError: true });
+  } finally {
+    clearTimeout(timeoutId);
+  }
   if (res.status === 401) {
     window.location.href = '/login.html';
     return new Promise(() => {}); // stoppe l'exécution, la navigation prend le relais
@@ -61,6 +118,22 @@ async function api(url, options) {
     throw Object.assign(new Error(data.error || 'ERREUR'), { data });
   }
   return data;
+}
+
+// Reessaie automatiquement en cas de souci reseau/timeout (ex: le serveur
+// gratuit qui se reveille apres une pause), mais pas sur une vraie erreur
+// metier (ex: trajet deja termine).
+async function apiWithNetworkRetry(url, options, btn, baseLabel, { retries = 3, delayMs = 3000 } = {}) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await api(url, options);
+    } catch (err) {
+      const isNetworkIssue = !!err.networkError;
+      if (!isNetworkIssue || attempt === retries) throw err;
+      if (btn) btn.textContent = `Nouvelle tentative (${attempt + 1}/${retries})…`;
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
 }
 
 // --- Navigation ---
@@ -78,12 +151,70 @@ function closeModal(id) {
   document.getElementById(id).classList.add('hidden');
 }
 
+// --- Bandeau de reconnexion ---
+
+const DEFAULT_RECONNECT_TEXT =
+  'Connexion au serveur en cours (réveil après une pause), ça peut prendre jusqu\'à une minute…';
+
+function showReconnectBanner(visible, text) {
+  const banner = document.getElementById('reconnect-banner');
+  if (!banner) return;
+  if (!visible) {
+    banner.classList.add('hidden');
+    return;
+  }
+  banner.innerHTML = `${escapeHtml(text || DEFAULT_RECONNECT_TEXT)} <button id="btn-retry-connection" class="reconnect-retry-btn">Réessayer</button>`;
+  banner.classList.remove('hidden');
+  document.getElementById('btn-retry-connection').addEventListener('click', () => ensureHomeFresh());
+}
+
 // --- Home / trajet status ---
+
+let homeLoading = false;
+
+async function ensureHomeFresh() {
+  if (homeLoading) return;
+  homeLoading = true;
+  try {
+    await refreshHome();
+    showReconnectBanner(false);
+  } catch (e) {
+    showReconnectBanner(true);
+    const MAX_RETRIES = 6;
+    let success = false;
+    for (let i = 0; i < MAX_RETRIES; i++) {
+      await new Promise((r) => setTimeout(r, 3000));
+      try {
+        await refreshHome();
+        success = true;
+        break;
+      } catch (err) {
+        // on continue les tentatives
+      }
+    }
+    showReconnectBanner(
+      !success,
+      success ? undefined : 'Toujours pas de réponse du serveur. Vérifie ta connexion et réessaie.'
+    );
+  } finally {
+    homeLoading = false;
+  }
+  refreshTrajetCounter().catch(() => {});
+}
 
 async function refreshHome() {
   const { trajet } = await api('/api/trajets/actif');
   state.activeTrajet = trajet;
   renderTrajetCard();
+}
+
+async function refreshTrajetCounter() {
+  const el = document.getElementById('trajet-counter');
+  if (!el) return;
+  const { trajets } = await api(`/api/trajets?date=${todayStr()}`);
+  const count = trajets.filter((t) => t.status === 'termine').length;
+  el.textContent =
+    count === 0 ? '' : count === 1 ? '1 trajet effectué aujourd\'hui' : `${count} trajets effectués aujourd'hui`;
 }
 
 function renderTrajetCard() {
@@ -115,19 +246,26 @@ function renderTrajetCard() {
   }
 }
 
-async function onStartTrajet() {
+async function onStartTrajet(e) {
+  const btn = e.currentTarget;
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Démarrage…';
   try {
-    const { trajet } = await api('/api/trajets/start', { method: 'POST' });
+    const { trajet } = await apiWithNetworkRetry('/api/trajets/start', { method: 'POST' }, btn, originalText);
     state.activeTrajet = trajet;
     renderTrajetCard();
-  } catch (e) {
-    alert("Impossible de démarrer le trajet : " + e.message);
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = originalText;
+    alert('Impossible de démarrer le trajet : ' + err.message);
   }
 }
 
 function onOpenFinish() {
   document.getElementById('form-finish').reset();
   document.getElementById('mission-autre-input').classList.add('hidden');
+  document.getElementById('centre-livraison-select').classList.add('hidden');
   document.getElementById('parking-montant-input').classList.add('hidden');
   openModal('modal-finish');
 }
@@ -136,8 +274,9 @@ document.getElementById('btn-cancel-finish').addEventListener('click', () => clo
 
 document.querySelectorAll('#mission-type-group input[name="missionType"]').forEach((input) => {
   input.addEventListener('change', () => {
-    const isAutre = document.querySelector('#mission-type-group input[name="missionType"]:checked').value === 'Autre';
-    document.getElementById('mission-autre-input').classList.toggle('hidden', !isAutre);
+    const value = document.querySelector('#mission-type-group input[name="missionType"]:checked').value;
+    document.getElementById('mission-autre-input').classList.toggle('hidden', value !== 'Autre');
+    document.getElementById('centre-livraison-select').classList.toggle('hidden', value !== 'Livraison');
   });
 });
 
@@ -152,25 +291,46 @@ document.getElementById('form-finish').addEventListener('submit', async (e) => {
   e.preventDefault();
   const missionType = document.querySelector('input[name="missionType"]:checked')?.value;
   const missionAutre = document.getElementById('mission-autre-input').value;
+  const centreLivraison = document.getElementById('centre-livraison-select').value;
   const vehicule = document.querySelector('input[name="vehicule"]:checked')?.value;
   const parkingPaye = document.querySelector('input[name="parkingPaye"]:checked')?.value === 'oui';
   const parkingMontant = document.getElementById('parking-montant-input').value;
+  const km = document.getElementById('km-input').value;
 
   if (!missionType || !vehicule) {
     alert('Merci de remplir tous les champs.');
     return;
   }
+  if (missionType === 'Livraison' && !centreLivraison) {
+    alert('Merci de préciser le centre de livraison.');
+    return;
+  }
+
+  const btn = e.submitter || document.querySelector('#form-finish button[type="submit"]');
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Enregistrement…';
 
   try {
-    await api(`/api/trajets/${state.activeTrajet.id}/finish`, {
-      method: 'POST',
-      body: JSON.stringify({ missionType, missionAutre, vehicule, parkingPaye, parkingMontant }),
-    });
+    await apiWithNetworkRetry(
+      `/api/trajets/${state.activeTrajet.id}/finish`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ missionType, missionAutre, centreLivraison, vehicule, parkingPaye, parkingMontant, km }),
+      },
+      btn,
+      originalText
+    );
     closeModal('modal-finish');
     state.activeTrajet = null;
     renderTrajetCard();
+    refreshTrajetCounter().catch(() => {});
+    showPostTrajetMessage();
   } catch (err) {
     alert('Erreur : ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
   }
 });
 
@@ -193,14 +353,27 @@ document.getElementById('form-plein').addEventListener('submit', async (e) => {
     return;
   }
 
+  const btn = e.submitter || document.querySelector('#form-plein button[type="submit"]');
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Enregistrement…';
+
   try {
-    await api('/api/pleins', {
-      method: 'POST',
-      body: JSON.stringify({ vehicule, montant }),
-    });
+    await apiWithNetworkRetry(
+      '/api/pleins',
+      {
+        method: 'POST',
+        body: JSON.stringify({ vehicule, montant }),
+      },
+      btn,
+      originalText
+    );
     closeModal('modal-plein');
   } catch (err) {
     alert('Erreur : ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
   }
 });
 
@@ -222,7 +395,7 @@ document.getElementById('btn-go-date').addEventListener('click', () => {
 
 document.getElementById('btn-back-home').addEventListener('click', () => {
   showView('view-home');
-  refreshHome();
+  ensureHomeFresh();
 });
 
 document.getElementById('input-date').addEventListener('change', (e) => {
@@ -231,12 +404,17 @@ document.getElementById('input-date').addEventListener('change', (e) => {
 
 async function loadJour(dateStr) {
   state.currentJourDate = dateStr;
-  const [{ trajets }, { pleins }] = await Promise.all([
-    api(`/api/trajets?date=${dateStr}`),
-    api(`/api/pleins?date=${dateStr}`),
-  ]);
-  renderJourSummary(trajets, pleins);
-  renderTimeline(trajets, pleins);
+  try {
+    const [{ trajets }, { pleins }] = await Promise.all([
+      apiWithNetworkRetry(`/api/trajets?date=${dateStr}`, {}, null),
+      apiWithNetworkRetry(`/api/pleins?date=${dateStr}`, {}, null),
+    ]);
+    renderJourSummary(trajets, pleins);
+    renderTimeline(trajets, pleins);
+  } catch (err) {
+    document.getElementById('jour-timeline').innerHTML =
+      '<div class="empty-state">Impossible de charger ces données, vérifie ta connexion et réessaie.</div>';
+  }
 }
 
 function renderJourSummary(trajets, pleins) {
@@ -249,11 +427,13 @@ function renderJourSummary(trajets, pleins) {
   }, 0);
   const totalParking = trajets.reduce((sum, t) => sum + (t.parkingMontant || 0), 0);
   const totalPleins = pleins.reduce((sum, p) => sum + (p.montant || 0), 0);
+  const totalKm = trajets.reduce((sum, t) => sum + (t.km || 0), 0);
 
   const summary = document.getElementById('jour-summary');
   summary.innerHTML = `
     <div class="summary-row"><span class="summary-label">Nombre de trajets</span><span class="summary-value">${trajets.length}</span></div>
     <div class="summary-row"><span class="summary-label">Temps total en trajet</span><span class="summary-value">${formatDurationMin(totalMinutes)}</span></div>
+    <div class="summary-row"><span class="summary-label">Total km parcourus</span><span class="summary-value">${totalKm} km</span></div>
     <div class="summary-row"><span class="summary-label">Total parking</span><span class="summary-value">${totalParking.toFixed(2)} €</span></div>
     <div class="summary-row"><span class="summary-label">Total pleins</span><span class="summary-value">${totalPleins.toFixed(2)} €</span></div>
   `;
@@ -299,8 +479,10 @@ function renderTimeline(trajets, pleins) {
           </div>
           <div class="timeline-detail">
             <span>🚗 ${enCours ? 'Trajet en cours' : labelMissionType(t)}</span>
+            ${t.missionType === 'Livraison' && t.centreLivraison ? `<span>🏭 ${escapeHtml(t.centreLivraison)}</span>` : ''}
             ${t.vehicule ? `<span>🔑 ${t.vehicule}</span>` : ''}
             ${t.parkingPaye ? `<span>🅿️ ${t.parkingMontant.toFixed(2)} €</span>` : ''}
+            ${t.km ? `<span>📏 ${t.km} km</span>` : ''}
           </div>
         </div>
       `;
@@ -331,6 +513,21 @@ document.getElementById('btn-logout').addEventListener('click', async () => {
   window.location.href = '/login.html';
 });
 
+// --- Reprise apres pause (veille du telephone, app en arriere-plan, etc.) ---
+
+document.addEventListener('visibilitychange', () => {
+  const homeVisible = !document.getElementById('view-home').classList.contains('hidden');
+  if (document.visibilityState === 'visible' && homeVisible) {
+    ensureHomeFresh();
+  }
+});
+
+window.addEventListener('pageshow', (e) => {
+  if (e.persisted) {
+    ensureHomeFresh();
+  }
+});
+
 // --- Init ---
 
-refreshHome();
+ensureHomeFresh();

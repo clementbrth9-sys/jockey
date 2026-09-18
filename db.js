@@ -7,6 +7,14 @@ const client = createClient({
   authToken: process.env.TURSO_AUTH_TOKEN || undefined,
 });
 
+async function addColumnIfMissing(table, column, definition) {
+  try {
+    await client.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  } catch (err) {
+    if (!/duplicate column name/i.test(err.message)) throw err;
+  }
+}
+
 async function init() {
   await client.execute(`
     CREATE TABLE IF NOT EXISTS trajets (
@@ -32,6 +40,8 @@ async function init() {
       montant REAL NOT NULL
     )
   `);
+  await addColumnIfMissing('trajets', 'centreLivraison', 'TEXT');
+  await addColumnIfMissing('trajets', 'km', 'REAL');
 }
 
 function toDateStr(d) {
@@ -55,6 +65,8 @@ function rowToTrajet(row) {
     vehicule: row.vehicule,
     parkingPaye: !!row.parkingPaye,
     parkingMontant: row.parkingMontant,
+    centreLivraison: row.centreLivraison,
+    km: row.km,
     status: row.status,
   };
 }
@@ -95,6 +107,8 @@ async function startTrajet() {
     vehicule: null,
     parkingPaye: false,
     parkingMontant: null,
+    centreLivraison: null,
+    km: null,
     status: 'en_cours',
   };
   await client.execute({
@@ -134,11 +148,15 @@ async function finishTrajet(id, details) {
   const dureeMinutes = Math.round((now.getTime() - debut.getTime()) / 60000);
 
   const missionAutre = details.missionType === 'Autre' ? (details.missionAutre || '') : null;
+  const centreLivraison = details.missionType === 'Livraison' ? (details.centreLivraison || '') : null;
   const parkingPaye = !!details.parkingPaye;
   const parkingMontant = parkingPaye ? Number(details.parkingMontant) || 0 : null;
+  const km = details.km !== undefined && details.km !== null && details.km !== ''
+    ? Number(details.km)
+    : null;
 
   await client.execute({
-    sql: `UPDATE trajets SET heureFin = ?, dureeMinutes = ?, missionType = ?, missionAutre = ?, vehicule = ?, parkingPaye = ?, parkingMontant = ?, status = 'termine' WHERE id = ?`,
+    sql: `UPDATE trajets SET heureFin = ?, dureeMinutes = ?, missionType = ?, missionAutre = ?, vehicule = ?, parkingPaye = ?, parkingMontant = ?, centreLivraison = ?, km = ?, status = 'termine' WHERE id = ?`,
     args: [
       now.toISOString(),
       dureeMinutes,
@@ -147,6 +165,8 @@ async function finishTrajet(id, details) {
       details.vehicule,
       parkingPaye ? 1 : 0,
       parkingMontant,
+      centreLivraison,
+      km,
       id,
     ],
   });
@@ -161,6 +181,8 @@ async function finishTrajet(id, details) {
       vehicule: details.vehicule,
       parkingPaye,
       parkingMontant,
+      centreLivraison,
+      km,
       status: 'termine',
     },
   };

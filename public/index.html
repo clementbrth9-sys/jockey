@@ -20,6 +20,8 @@
 
   <!-- Ecran principal -->
   <section id="view-home" class="view">
+    <div id="reconnect-banner" class="reconnect-banner hidden"></div>
+    <div id="trajet-counter" class="trajet-counter"></div>
     <div id="trajet-status-card" class="card"></div>
 
     <button id="btn-plein" class="btn btn-secondary btn-big">⛽ Faire le plein</button>
@@ -51,9 +53,17 @@
       <div class="radio-group" id="mission-type-group">
         <label class="radio-pill"><input type="radio" name="missionType" value="Citiz" required> Citiz</label>
         <label class="radio-pill"><input type="radio" name="missionType" value="Controle technique"> Contrôle technique</label>
+        <label class="radio-pill"><input type="radio" name="missionType" value="Livraison"> Livraison</label>
         <label class="radio-pill"><input type="radio" name="missionType" value="Autre"> Autre</label>
       </div>
       <input type="text" id="mission-autre-input" class="hidden" placeholder="Précisez la mission" />
+      <select id="centre-livraison-select" class="hidden">
+        <option value="" disabled selected>Pour quel centre ?</option>
+        <option value="Eckbolsheim">Eckbolsheim</option>
+        <option value="Truchtersheim">Truchtersheim</option>
+        <option value="Marlenheim">Marlenheim</option>
+        <option value="Neudorf">Neudorf</option>
+      </select>
 
       <label>Véhicule utilisé</label>
       <div class="radio-group" id="vehicule-group">
@@ -68,6 +78,9 @@
         <label class="radio-pill"><input type="radio" name="parkingPaye" value="oui"> Oui</label>
       </div>
       <input type="number" id="parking-montant-input" class="hidden" step="0.01" min="0" placeholder="Montant (€)" />
+
+      <label>Nombre de km parcourus</label>
+      <input type="number" id="km-input" step="1" min="0" placeholder="ex : 12" />
 
       <div class="modal-actions">
         <button type="button" id="btn-cancel-finish" class="btn btn-outline">Annuler</button>
@@ -98,6 +111,8 @@
     </form>
   </div>
 </div>
+
+<div id="toast" class="toast hidden"></div>
 
 <script src="app.js"></script>
 </body>

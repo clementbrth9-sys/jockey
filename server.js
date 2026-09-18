@@ -10,6 +10,11 @@ const PORT = process.env.PORT || 3000;
 
 app.set('trust proxy', true);
 app.use(express.json());
+
+// Route de ping pour un service de keep-alive externe (evite la mise en veille
+// du plan gratuit Render). Volontairement avant le middleware d'auth.
+app.get('/healthz', (req, res) => res.json({ ok: true }));
+
 app.use(auth.authMiddleware);
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -50,7 +55,7 @@ app.post('/api/trajets/start', async (req, res) => {
 });
 
 app.post('/api/trajets/:id/finish', async (req, res) => {
-  const { missionType, missionAutre, vehicule, parkingPaye, parkingMontant } = req.body;
+  const { missionType, missionAutre, vehicule, parkingPaye, parkingMontant, centreLivraison, km } = req.body;
   if (!missionType || !vehicule) {
     return res.status(400).json({ error: 'CHAMPS_MANQUANTS' });
   }
@@ -60,6 +65,8 @@ app.post('/api/trajets/:id/finish', async (req, res) => {
     vehicule,
     parkingPaye,
     parkingMontant,
+    centreLivraison,
+    km,
   });
   if (result.error) {
     return res.status(400).json(result);
