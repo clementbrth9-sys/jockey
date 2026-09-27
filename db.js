@@ -220,13 +220,31 @@ async function getPleinsByDate(dateStr) {
   return result.rows.map(rowToPlein);
 }
 
+async function getTrajetsBetween(fromStr, toStr) {
+  const result = await client.execute({
+    sql: `SELECT * FROM trajets WHERE date BETWEEN ? AND ? ORDER BY heureDebut ASC`,
+    args: [fromStr, toStr],
+  });
+  return result.rows.map(rowToTrajet);
+}
+
+async function getPleinsBetween(fromStr, toStr) {
+  const result = await client.execute({
+    sql: `SELECT * FROM pleins WHERE date BETWEEN ? AND ? ORDER BY heure ASC`,
+    args: [fromStr, toStr],
+  });
+  return result.rows.map(rowToPlein);
+}
+
 module.exports = {
   init,
   getActiveTrajet,
   startTrajet,
   finishTrajet,
   getTrajetsByDate,
+  getTrajetsBetween,
   addPlein,
   getPleinsByDate,
+  getPleinsBetween,
   toDateStr,
 };

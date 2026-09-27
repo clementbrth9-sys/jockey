@@ -95,6 +95,27 @@ app.get('/api/pleins', async (req, res) => {
   res.json({ pleins: await db.getPleinsByDate(date) });
 });
 
+// --- Admin (tableau de bord) ---
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const MAX_RANGE_DAYS = 366;
+
+app.get('/api/admin/activite', async (req, res) => {
+  const { from, to } = req.query;
+  if (!DATE_RE.test(from || '') || !DATE_RE.test(to || '') || from > to) {
+    return res.status(400).json({ error: 'PERIODE_INVALIDE' });
+  }
+  const days = (new Date(to) - new Date(from)) / 86400000;
+  if (days > MAX_RANGE_DAYS) {
+    return res.status(400).json({ error: 'PERIODE_TROP_LONGUE' });
+  }
+  const [trajets, pleins] = await Promise.all([
+    db.getTrajetsBetween(from, to),
+    db.getPleinsBetween(from, to),
+  ]);
+  res.json({ trajets, pleins, now: new Date().toISOString() });
+});
+
 db.init()
   .then(() => {
     app.listen(PORT, () => {
