@@ -25,7 +25,7 @@ function formatDurationMin(minutes) {
   if (minutes === null || minutes === undefined) return '-';
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
-  if (h === 0) return `${m}min`;
+  if (h === 0) return `${m} min`;
   return `${h}h${pad(m)}`;
 }
 
@@ -43,9 +43,25 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+const EUR = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' });
+function formatEuro(n) {
+  return EUR.format(n || 0);
+}
+
+const VEHICULE_LABELS = {
+  'Relais Citiz': 'Relais Citiz',
+  'Vehicule perso': 'Véhicule perso',
+  'Vehicule controle technique': 'Véhicule contrôle technique',
+};
+function labelVehicule(v) {
+  return escapeHtml(VEHICULE_LABELS[v] || v);
+}
+
+const MISSION_LABELS = { 'Controle technique': 'Contrôle technique' };
+
 function labelMissionType(t) {
   if (t.missionType === 'Autre') return escapeHtml(t.missionAutre || 'Autre');
-  return t.missionType;
+  return escapeHtml(MISSION_LABELS[t.missionType] || t.missionType);
 }
 
 // --- Icônes (SVG inline, style trait fin) ---
@@ -92,10 +108,11 @@ function pickMessage(pool) {
 }
 
 let toastTimeout = null;
-function showToast(message) {
+function showToast(message, { error = false } = {}) {
   const toast = document.getElementById('toast');
   clearTimeout(toastTimeout);
   toast.textContent = message;
+  toast.classList.toggle('toast-error', error);
   toast.classList.remove('hidden');
   toastTimeout = setTimeout(() => toast.classList.add('hidden'), 3500);
 }
@@ -157,12 +174,82 @@ function showView(id) {
   document.getElementById(id).classList.remove('hidden');
 }
 
+let modalOpener = null;
+
 function openModal(id) {
-  document.getElementById(id).classList.remove('hidden');
+  modalOpener = document.activeElement;
+  const modal = document.getElementById(id);
+  modal.classList.remove('hidden');
+  modal.querySelector('.modal-body').scrollTop = 0;
+  const first = modal.querySelector('input, select, button');
+  if (first) first.focus({ preventScroll: true });
 }
 
 function closeModal(id) {
   document.getElementById(id).classList.add('hidden');
+  if (modalOpener && document.body.contains(modalOpener)) modalOpener.focus();
+  modalOpener = null;
+}
+
+document.querySelectorAll('.modal').forEach((modal) => {
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeModal(modal.id);
+  });
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const open = document.querySelector('.modal:not(.hidden)');
+  if (open) closeModal(open.id);
+});
+
+// --- Erreurs de formulaire (affichees sous le champ concerne) ---
+
+function setFieldError(fieldId, message) {
+  const field = document.getElementById(fieldId);
+  let el = field.querySelector('.field-error');
+  if (!message) {
+    field.classList.remove('has-error');
+    if (el) el.remove();
+    return;
+  }
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'field-error';
+    el.id = `${fieldId}-error`;
+    field.appendChild(el);
+  }
+  el.textContent = message;
+  field.classList.add('has-error');
+  const control = field.querySelector('input:not([type=radio]), select');
+  if (control) control.setAttribute('aria-describedby', el.id);
+}
+
+function clearFormErrors(form) {
+  form.querySelectorAll('.has-error').forEach((f) => setFieldError(f.id, null));
+  const formError = form.querySelector('.form-error');
+  formError.textContent = '';
+  formError.classList.add('hidden');
+}
+
+function showFormError(form, message) {
+  const formError = form.querySelector('.form-error');
+  formError.textContent = message;
+  formError.classList.remove('hidden');
+  formError.scrollIntoView({ block: 'nearest' });
+}
+
+function focusFirstError(form) {
+  const field = form.querySelector('.has-error');
+  if (!field) return;
+  field.scrollIntoView({ block: 'center' });
+  const control = field.querySelector('input:not([type=radio]), select') || field.querySelector('input');
+  if (control) control.focus({ preventScroll: true });
+}
+
+function errorMessage(err) {
+  if (err.networkError) return 'Pas de connexion au serveur. Vérifie le réseau et réessaie.';
+  return 'Une erreur est survenue, réessaie.';
 }
 
 // --- Bandeau de reconnexion ---
@@ -246,7 +333,7 @@ function renderTrajetCard() {
     card.innerHTML = `
       <div class="hero-label">Trajet en cours</div>
       <div class="hero-timer" id="trajet-timer">00:00:00</div>
-      <button id="btn-finish" class="hero-btn hero-btn-danger">${ICONS.square} Terminer le trajet</button>
+      <button id="btn-finish" class="hero-btn hero-btn-stop">${ICONS.square} Terminer le trajet</button>
     `;
     const debut = new Date(state.activeTrajet.heureDebut).getTime();
     const timerEl = document.getElementById('trajet-timer');
@@ -279,15 +366,17 @@ async function onStartTrajet(e) {
   } catch (err) {
     btn.disabled = false;
     btn.innerHTML = originalHTML;
-    alert('Impossible de démarrer le trajet : ' + err.message);
+    showToast('Impossible de démarrer le trajet. ' + errorMessage(err), { error: true });
   }
 }
 
 function onOpenFinish() {
-  document.getElementById('form-finish').reset();
-  document.getElementById('mission-autre-input').classList.add('hidden');
-  document.getElementById('centre-livraison-select').classList.add('hidden');
-  document.getElementById('parking-montant-input').classList.add('hidden');
+  const form = document.getElementById('form-finish');
+  form.reset();
+  clearFormErrors(form);
+  document.getElementById('field-mission-autre').classList.add('hidden');
+  document.getElementById('field-centre').classList.add('hidden');
+  document.getElementById('field-parking-montant').classList.add('hidden');
   openModal('modal-finish');
 }
 
@@ -296,15 +385,16 @@ document.getElementById('btn-cancel-finish').addEventListener('click', () => clo
 document.querySelectorAll('#mission-type-group input[name="missionType"]').forEach((input) => {
   input.addEventListener('change', () => {
     const value = document.querySelector('#mission-type-group input[name="missionType"]:checked').value;
-    document.getElementById('mission-autre-input').classList.toggle('hidden', value !== 'Autre');
-    document.getElementById('centre-livraison-select').classList.toggle('hidden', value !== 'Livraison');
+    document.getElementById('field-mission-autre').classList.toggle('hidden', value !== 'Autre');
+    document.getElementById('field-centre').classList.toggle('hidden', value !== 'Livraison');
+    setFieldError('field-mission', null);
   });
 });
 
 document.querySelectorAll('input[name="parkingPaye"]').forEach((input) => {
   input.addEventListener('change', () => {
     const isOui = document.querySelector('input[name="parkingPaye"]:checked').value === 'oui';
-    document.getElementById('parking-montant-input').classList.toggle('hidden', !isOui);
+    document.getElementById('field-parking-montant').classList.toggle('hidden', !isOui);
   });
 });
 
@@ -318,12 +408,14 @@ document.getElementById('form-finish').addEventListener('submit', async (e) => {
   const parkingMontant = document.getElementById('parking-montant-input').value;
   const km = document.getElementById('km-input').value;
 
-  if (!missionType || !vehicule) {
-    alert('Merci de remplir tous les champs.');
-    return;
-  }
-  if (missionType === 'Livraison' && !centreLivraison) {
-    alert('Merci de préciser le centre de livraison.');
+  const form = e.currentTarget;
+  clearFormErrors(form);
+  if (!missionType) setFieldError('field-mission', 'Choisis le type de mission.');
+  if (missionType === 'Livraison' && !centreLivraison) setFieldError('field-centre', 'Choisis le centre de livraison.');
+  if (!vehicule) setFieldError('field-vehicule', 'Choisis le véhicule utilisé.');
+  if (parkingPaye && parkingMontant === '') setFieldError('field-parking-montant', 'Indique le montant du parking.');
+  if (form.querySelector('.has-error')) {
+    focusFirstError(form);
     return;
   }
 
@@ -348,17 +440,24 @@ document.getElementById('form-finish').addEventListener('submit', async (e) => {
     refreshTrajetCounter().catch(() => {});
     showPostTrajetMessage();
   } catch (err) {
-    alert('Erreur : ' + err.message);
+    showFormError(form, errorMessage(err));
   } finally {
     btn.disabled = false;
     btn.textContent = originalText;
   }
 });
 
+document.querySelectorAll('input[name="vehicule"]').forEach((i) =>
+  i.addEventListener('change', () => setFieldError('field-vehicule', null)));
+document.getElementById('centre-livraison-select').addEventListener('change', () => setFieldError('field-centre', null));
+document.getElementById('parking-montant-input').addEventListener('input', () => setFieldError('field-parking-montant', null));
+
 // --- Plein ---
 
 document.getElementById('btn-plein').addEventListener('click', () => {
-  document.getElementById('form-plein').reset();
+  const form = document.getElementById('form-plein');
+  form.reset();
+  clearFormErrors(form);
   openModal('modal-plein');
 });
 
@@ -369,8 +468,12 @@ document.getElementById('form-plein').addEventListener('submit', async (e) => {
   const vehicule = document.querySelector('input[name="vehiculePlein"]:checked')?.value;
   const montant = document.getElementById('montant-plein-input').value;
 
-  if (!vehicule || montant === '') {
-    alert('Merci de remplir tous les champs.');
+  const form = e.currentTarget;
+  clearFormErrors(form);
+  if (!vehicule) setFieldError('field-vehicule-plein', 'Choisis le véhicule.');
+  if (montant === '') setFieldError('field-montant-plein', 'Indique le montant du plein.');
+  if (form.querySelector('.has-error')) {
+    focusFirstError(form);
     return;
   }
 
@@ -390,13 +493,18 @@ document.getElementById('form-plein').addEventListener('submit', async (e) => {
       originalText
     );
     closeModal('modal-plein');
+    showToast(`Plein de ${formatEuro(Number(montant))} enregistré.`);
   } catch (err) {
-    alert('Erreur : ' + err.message);
+    showFormError(form, errorMessage(err));
   } finally {
     btn.disabled = false;
     btn.textContent = originalText;
   }
 });
+
+document.querySelectorAll('input[name="vehiculePlein"]').forEach((i) =>
+  i.addEventListener('change', () => setFieldError('field-vehicule-plein', null)));
+document.getElementById('montant-plein-input').addEventListener('input', () => setFieldError('field-montant-plein', null));
 
 // --- Vue jour ---
 
@@ -448,8 +556,8 @@ function renderJourSummary(trajets, pleins) {
     <div class="summary-row"><span class="summary-label">Nombre de trajets</span><span class="summary-value">${trajets.length}</span></div>
     <div class="summary-row"><span class="summary-label">Temps total en trajet</span><span class="summary-value">${formatDurationMin(totalMinutes)}</span></div>
     <div class="summary-row"><span class="summary-label">Total km parcourus</span><span class="summary-value">${totalKm} km</span></div>
-    <div class="summary-row"><span class="summary-label">Total parking</span><span class="summary-value">${totalParking.toFixed(2)} €</span></div>
-    <div class="summary-row"><span class="summary-label">Total pleins</span><span class="summary-value">${totalPleins.toFixed(2)} €</span></div>
+    <div class="summary-row"><span class="summary-label">Total parking</span><span class="summary-value">${formatEuro(totalParking)}</span></div>
+    <div class="summary-row"><span class="summary-label">Total pleins</span><span class="summary-value">${formatEuro(totalPleins)}</span></div>
   `;
 }
 
@@ -494,8 +602,8 @@ function renderTimeline(trajets, pleins) {
           <div class="timeline-detail">
             <span>${ICONS.route} ${enCours ? 'Trajet en cours' : labelMissionType(t)}</span>
             ${t.missionType === 'Livraison' && t.centreLivraison ? `<span>${ICONS.building} ${escapeHtml(t.centreLivraison)}</span>` : ''}
-            ${t.vehicule ? `<span>${ICONS.car} ${t.vehicule}</span>` : ''}
-            ${t.parkingPaye ? `<span>${ICONS.pin} ${t.parkingMontant.toFixed(2)} €</span>` : ''}
+            ${t.vehicule ? `<span>${ICONS.car} ${labelVehicule(t.vehicule)}</span>` : ''}
+            ${t.parkingPaye ? `<span>${ICONS.pin} ${formatEuro(t.parkingMontant)}</span>` : ''}
             ${t.km ? `<span>${ICONS.ruler} ${t.km} km</span>` : ''}
           </div>
         </div>
@@ -509,9 +617,9 @@ function renderTimeline(trajets, pleins) {
         <div class="timeline-item plein">
           <div class="timeline-top">
             <span>${formatTime(p.heure)} · Plein</span>
-            <span>${p.montant.toFixed(2)} €</span>
+            <span>${formatEuro(p.montant)}</span>
           </div>
-          <div class="timeline-detail"><span>${ICONS.car} ${p.vehicule}</span></div>
+          <div class="timeline-detail"><span>${ICONS.car} ${labelVehicule(p.vehicule)}</span></div>
         </div>
       `;
     }

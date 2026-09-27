@@ -2,11 +2,22 @@ const input = document.getElementById('password-input');
 const btn = document.getElementById('btn-login');
 const errorEl = document.getElementById('login-error');
 
-async function submit() {
-  errorEl.classList.add('hidden');
-  const password = input.value;
-  if (!password) return;
+// La zone d'erreur garde sa hauteur : on vide le texte au lieu de la masquer.
+function showError(message) {
+  errorEl.textContent = message;
+}
 
+async function submit() {
+  showError('');
+  const password = input.value;
+  if (!password) {
+    showError('Saisis le mot de passe.');
+    input.focus();
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Connexion…';
   try {
     const res = await fetch('/api/login', {
       method: 'POST',
@@ -18,15 +29,17 @@ async function submit() {
       return;
     }
     const data = await res.json().catch(() => ({}));
-    errorEl.textContent =
+    showError(
       data.error === 'TROP_DE_TENTATIVES'
         ? 'Trop de tentatives, réessaie plus tard.'
-        : 'Mot de passe incorrect.';
-    errorEl.classList.remove('hidden');
+        : 'Mot de passe incorrect.'
+    );
   } catch (e) {
-    errorEl.textContent = 'Erreur de connexion.';
-    errorEl.classList.remove('hidden');
+    showError('Pas de connexion au serveur, réessaie.');
   }
+  btn.disabled = false;
+  btn.textContent = 'Se connecter';
+  input.select();
 }
 
 btn.addEventListener('click', submit);
