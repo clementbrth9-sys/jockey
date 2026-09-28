@@ -90,12 +90,17 @@ app.post('/api/login', (req, res) => {
     return res.status(429).json({ error: 'TROP_DE_TENTATIVES' });
   }
   const { password } = req.body || {};
-  if (!auth.checkPassword(password)) {
+  const role = auth.checkPassword(password);
+  if (!role) {
     auth.registerAttempt(ip);
     return res.status(401).json({ error: 'MOT_DE_PASSE_INCORRECT' });
   }
-  auth.setSessionCookie(req, res);
-  res.json({ ok: true });
+  auth.setSessionCookie(req, res, role);
+  res.json({ ok: true, role });
+});
+
+app.get('/api/session', (req, res) => {
+  res.json({ role: req.role });
 });
 
 app.post('/api/logout', (req, res) => {

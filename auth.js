@@ -1,10 +1,12 @@
 const crypto = require('crypto');
 
 const COOKIE_NAME = 'session';
-const SESSION_DURATION_MS = 180 * 24 * 60 * 60 * 1000; // 180 jours
+const SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 jours : mot de passe a retaper une fois par mois
 
 const SESSION_SECRET = process.env.SESSION_SECRET;
 const APP_PASSWORD = process.env.APP_PASSWORD;
+// Optionnel : sans ADMIN_PASSWORD, le mot de passe de l'app donne aussi acces a l'admin.
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || null;
 
 if (!SESSION_SECRET || !APP_PASSWORD) {
   throw new Error(
@@ -56,34 +58,46 @@ function sha256(input) {
   return crypto.createHash('sha256').update(input).digest();
 }
 
+function sameSecret(input, secret) {
+  return crypto.timingSafeEqual(sha256(input), sha256(secret));
+}
+
+// Renvoie le role donne par le mot de passe ('admin' ou 'jockey'), ou null.
 function checkPassword(password) {
-  if (typeof password !== 'string' || password.length === 0) return false;
-  const a = sha256(password);
-  const b = sha256(APP_PASSWORD);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+  if (typeof password !== 'string' || password.length === 0) return null;
+  if (ADMIN_PASSWORD && sameSecret(password, ADMIN_PASSWORD)) return 'admin';
+  if (sameSecret(password, APP_PASSWORD)) return ADMIN_PASSWORD ? 'jockey' : 'admin';
+  return null;
 }
 
 function sign(value) {
   return crypto.createHmac('sha256', SESSION_SECRET).update(value).digest('hex');
 }
 
-function createSessionToken() {
+function createSessionToken(role) {
   const expiry = Date.now() + SESSION_DURATION_MS;
-  const payload = String(expiry);
+  const payload = `${expiry}~${role}`;
   return `${payload}.${sign(payload)}`;
 }
 
+// Renvoie le role de la session, ou null si elle est absente, invalide ou expiree.
 function verifySessionToken(token) {
-  if (!token || typeof token !== 'string' || !token.includes('.')) return false;
+  if (!token || typeof token !== 'string' || !token.includes('.')) return null;
   const [payload, signature] = token.split('.');
-  const expected = sign(payload);
+  if (!signature) return null;
   const sigBuf = Buffer.from(signature);
-  const expectedBuf = Buffer.from(expected);
+  const expectedBuf = Buffer.from(sign(payload));
   if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
-    return false;
+    return null;
   }
-  const expiry = Number(payload);
-  return Number.isFinite(expiry) && Date.now() < expiry;
+  const [expiryStr, role] = payload.split('~');
+  const expiry = Number(expiryStr);
+  const now = Date.now();
+  // Les anciens jetons de 180 jours (sans role) sont refuses : une reconnexion unique.
+  if (!Number.isFinite(expiry) || now >= expiry || expiry - now > SESSION_DURATION_MS) return null;
+  if (role !== 'admin' && role !== 'jockey') return null;
+  // Si ADMIN_PASSWORD est retire, tout le monde redevient admin comme avant.
+  return ADMIN_PASSWORD ? role : 'admin';
 }
 
 function getCookie(req, name) {
@@ -94,12 +108,12 @@ function getCookie(req, name) {
   return found ? decodeURIComponent(found.slice(name.length + 1)) : null;
 }
 
-function isAuthenticated(req) {
+function getRole(req) {
   return verifySessionToken(getCookie(req, COOKIE_NAME));
 }
 
-function setSessionCookie(req, res) {
-  const token = createSessionToken();
+function setSessionCookie(req, res, role) {
+  const token = createSessionToken(role);
   const secure = req.secure || req.headers['x-forwarded-proto'] === 'https';
   const maxAgeSec = Math.floor(SESSION_DURATION_MS / 1000);
   res.setHeader(
@@ -118,13 +132,21 @@ const OPEN_PATHS = new Set(['/login.html', '/login.js', '/style.css', '/logo.png
 // nom) pour qu'un chemin comme /fonts/../admin.html ne contourne pas l'auth.
 const FONT_PATH_RE = /^\/fonts\/[\w-]+\.woff2$/;
 
+// Pages et API reservees a l'admin
+const ADMIN_PATHS = new Set(['/admin.html', '/admin.js', '/admin.css']);
+const isAdminPath = (p) => ADMIN_PATHS.has(p) || p.startsWith('/api/admin/');
+
 function authMiddleware(req, res, next) {
   if (OPEN_PATHS.has(req.path) || FONT_PATH_RE.test(req.path)) return next();
-  if (isAuthenticated(req)) return next();
-  if (req.path.startsWith('/api/')) {
-    return res.status(401).json({ error: 'UNAUTHORIZED' });
+  const role = getRole(req);
+  if (role && (role === 'admin' || !isAdminPath(req.path))) {
+    req.role = role;
+    return next();
   }
-  return res.redirect('/login.html');
+  if (req.path.startsWith('/api/')) {
+    return res.status(role ? 403 : 401).json({ error: role ? 'ACCES_ADMIN_REQUIS' : 'UNAUTHORIZED' });
+  }
+  return res.redirect(isAdminPath(req.path) ? '/login.html?admin=1' : '/login.html');
 }
 
 module.exports = {

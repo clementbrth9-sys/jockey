@@ -8,6 +8,8 @@ services:
     envVars:
       - key: APP_PASSWORD
         sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
       - key: SESSION_SECRET
         sync: false
       - key: TURSO_DATABASE_URL

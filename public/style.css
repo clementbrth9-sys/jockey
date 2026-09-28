@@ -764,6 +764,16 @@ body {
   text-align: left;
 }
 
+.login-hint {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: #eef3fa;
+  color: var(--color-primary-dark);
+  font-weight: 500;
+  text-align: left;
+}
+
 .login-card .text-input {
   margin-bottom: 18px;
   text-align: center;

@@ -664,3 +664,9 @@ window.addEventListener('pageshow', (e) => {
 // --- Init ---
 
 ensureHomeFresh();
+
+// Le lien vers le tableau de bord n'apparait que pour une session admin
+// (le serveur bloque de toute facon l'acces aux autres).
+api('/api/session')
+  .then(({ role }) => document.getElementById('link-admin').classList.toggle('hidden', role !== 'admin'))
+  .catch(() => {});

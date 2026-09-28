@@ -2,6 +2,10 @@ const input = document.getElementById('password-input');
 const btn = document.getElementById('btn-login');
 const errorEl = document.getElementById('login-error');
 
+// Arrivee depuis une page admin sans les droits : on le dit clairement.
+const wantsAdmin = new URLSearchParams(location.search).get('admin') === '1';
+document.getElementById('login-admin-hint').classList.toggle('hidden', !wantsAdmin);
+
 // La zone d'erreur garde sa hauteur : on vide le texte au lieu de la masquer.
 function showError(message) {
   errorEl.textContent = message;
@@ -25,7 +29,14 @@ async function submit() {
       body: JSON.stringify({ password }),
     });
     if (res.ok) {
-      window.location.href = '/';
+      const { role } = await res.json().catch(() => ({}));
+      if (wantsAdmin && role !== 'admin') {
+        showError("Ce mot de passe ne donne pas accès au tableau de bord.");
+        btn.disabled = false;
+        btn.textContent = 'Se connecter';
+        return;
+      }
+      window.location.href = wantsAdmin ? '/admin.html' : '/';
       return;
     }
     const data = await res.json().catch(() => ({}));
