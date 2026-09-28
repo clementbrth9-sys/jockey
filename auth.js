@@ -17,10 +17,29 @@ const attempts = new Map(); // ip -> { count, resetAt }
 const MAX_ATTEMPTS = 10;
 const WINDOW_MS = 15 * 60 * 1000;
 
+// Plafond global en plus du plafond par IP : une attaque repartie sur beaucoup
+// d'adresses reste bornee. Contrepartie assumee : pendant une attaque, les vraies
+// connexions peuvent etre bloquees jusqu'a 15 min (les sessions deja ouvertes
+// continuent de fonctionner).
+const MAX_GLOBAL_ATTEMPTS = 100;
+const MAX_TRACKED_IPS = 5000;
+const globalAttempts = { count: 0, resetAt: 0 };
+
 function isRateLimited(ip) {
-  const entry = attempts.get(ip);
   const now = Date.now();
+  if (now > globalAttempts.resetAt) {
+    globalAttempts.count = 0;
+    globalAttempts.resetAt = now + WINDOW_MS;
+  }
+  if (globalAttempts.count >= MAX_GLOBAL_ATTEMPTS) return true;
+
+  const entry = attempts.get(ip);
   if (!entry || now > entry.resetAt) {
+    if (attempts.size >= MAX_TRACKED_IPS) {
+      for (const [key, value] of attempts) {
+        if (now > value.resetAt) attempts.delete(key);
+      }
+    }
     attempts.set(ip, { count: 0, resetAt: now + WINDOW_MS });
     return false;
   }
@@ -28,6 +47,7 @@ function isRateLimited(ip) {
 }
 
 function registerAttempt(ip) {
+  globalAttempts.count += 1;
   const entry = attempts.get(ip);
   if (entry) entry.count += 1;
 }
@@ -94,8 +114,12 @@ function clearSessionCookie(res) {
 
 const OPEN_PATHS = new Set(['/login.html', '/login.js', '/style.css', '/logo.png', '/logo-mark.png', '/api/login']);
 
+// Polices de la page de connexion. Motif strict (pas de "/" ni de ".." dans le
+// nom) pour qu'un chemin comme /fonts/../admin.html ne contourne pas l'auth.
+const FONT_PATH_RE = /^\/fonts\/[\w-]+\.woff2$/;
+
 function authMiddleware(req, res, next) {
-  if (OPEN_PATHS.has(req.path)) return next();
+  if (OPEN_PATHS.has(req.path) || FONT_PATH_RE.test(req.path)) return next();
   if (isAuthenticated(req)) return next();
   if (req.path.startsWith('/api/')) {
     return res.status(401).json({ error: 'UNAUTHORIZED' });

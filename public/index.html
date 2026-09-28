@@ -6,9 +6,6 @@
 <meta name="theme-color" content="#ffffff" />
 <title>MobiTrack</title>
 <link rel="icon" type="image/png" href="logo-mark.png" />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;600;700&display=swap" />
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -89,7 +86,7 @@
 
         <div class="form-field hidden" id="field-mission-autre">
           <label class="field-label" for="mission-autre-input">Précisez la mission</label>
-          <input type="text" id="mission-autre-input" class="text-input" autocomplete="off" />
+          <input type="text" id="mission-autre-input" class="text-input" autocomplete="off" maxlength="80" />
         </div>
 
         <div class="form-field hidden" id="field-centre">
@@ -122,12 +119,12 @@
 
         <div class="form-field hidden" id="field-parking-montant">
           <label class="field-label" for="parking-montant-input">Montant du parking (€)</label>
-          <input type="number" id="parking-montant-input" class="text-input" inputmode="decimal" step="0.01" min="0" placeholder="0,00" />
+          <input type="number" id="parking-montant-input" class="text-input" inputmode="decimal" step="0.01" min="0" max="100" placeholder="0,00" />
         </div>
 
-        <div class="form-field">
+        <div class="form-field" id="km-field">
           <label class="field-label" for="km-input">Kilomètres parcourus</label>
-          <input type="number" id="km-input" class="text-input" inputmode="numeric" step="1" min="0" placeholder="ex : 12" />
+          <input type="number" id="km-input" class="text-input" inputmode="numeric" step="1" min="0" max="1000" placeholder="ex : 12" />
         </div>
 
         <div class="form-error hidden" id="finish-error" role="alert"></div>
@@ -158,7 +155,7 @@
 
         <div class="form-field" id="field-montant-plein">
           <label class="field-label" for="montant-plein-input">Montant (€)</label>
-          <input type="number" id="montant-plein-input" class="text-input" inputmode="decimal" step="0.01" min="0" placeholder="0,00" />
+          <input type="number" id="montant-plein-input" class="text-input" inputmode="decimal" step="0.01" min="0.01" max="300" placeholder="0,00" />
         </div>
 
         <div class="form-error hidden" id="plein-error" role="alert"></div>

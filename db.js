@@ -111,9 +111,12 @@ async function startTrajet() {
     km: null,
     status: 'en_cours',
   };
-  await client.execute({
+  // Insertion conditionnelle en une seule requete : deux demarrages simultanes
+  // (double tap, deux telephones) ne peuvent pas creer deux trajets en cours.
+  const inserted = await client.execute({
     sql: `INSERT INTO trajets (id, date, heureDebut, heureFin, dureeMinutes, missionType, missionAutre, vehicule, parkingPaye, parkingMontant, status)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          WHERE NOT EXISTS (SELECT 1 FROM trajets WHERE status = 'en_cours')`,
     args: [
       trajet.id,
       trajet.date,
@@ -128,6 +131,9 @@ async function startTrajet() {
       trajet.status,
     ],
   });
+  if (inserted.rowsAffected === 0) {
+    return { error: 'TRAJET_DEJA_EN_COURS', trajet: await getActiveTrajet() };
+  }
   return { trajet };
 }
 
@@ -155,8 +161,8 @@ async function finishTrajet(id, details) {
     ? Number(details.km)
     : null;
 
-  await client.execute({
-    sql: `UPDATE trajets SET heureFin = ?, dureeMinutes = ?, missionType = ?, missionAutre = ?, vehicule = ?, parkingPaye = ?, parkingMontant = ?, centreLivraison = ?, km = ?, status = 'termine' WHERE id = ?`,
+  const updated = await client.execute({
+    sql: `UPDATE trajets SET heureFin = ?, dureeMinutes = ?, missionType = ?, missionAutre = ?, vehicule = ?, parkingPaye = ?, parkingMontant = ?, centreLivraison = ?, km = ?, status = 'termine' WHERE id = ? AND status = 'en_cours'`,
     args: [
       now.toISOString(),
       dureeMinutes,
@@ -170,6 +176,9 @@ async function finishTrajet(id, details) {
       id,
     ],
   });
+  if (updated.rowsAffected === 0) {
+    return { error: 'TRAJET_DEJA_TERMINE' };
+  }
 
   return {
     trajet: {

@@ -239,6 +239,11 @@ function showFormError(form, message) {
   formError.scrollIntoView({ block: 'nearest' });
 }
 
+function inRange(value, min, max) {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= min && n <= max;
+}
+
 function focusFirstError(form) {
   const field = form.querySelector('.has-error');
   if (!field) return;
@@ -249,6 +254,8 @@ function focusFirstError(form) {
 
 function errorMessage(err) {
   if (err.networkError) return 'Pas de connexion au serveur. Vérifie le réseau et réessaie.';
+  if (err.message === 'VALEUR_INVALIDE') return 'Une valeur a été refusée. Vérifie les montants et les km.';
+  if (err.message === 'TRAJET_DEJA_TERMINE') return 'Ce trajet a déjà été terminé.';
   return 'Une erreur est survenue, réessaie.';
 }
 
@@ -414,6 +421,8 @@ document.getElementById('form-finish').addEventListener('submit', async (e) => {
   if (missionType === 'Livraison' && !centreLivraison) setFieldError('field-centre', 'Choisis le centre de livraison.');
   if (!vehicule) setFieldError('field-vehicule', 'Choisis le véhicule utilisé.');
   if (parkingPaye && parkingMontant === '') setFieldError('field-parking-montant', 'Indique le montant du parking.');
+  else if (parkingPaye && !inRange(parkingMontant, 0, 100)) setFieldError('field-parking-montant', 'Le montant doit être entre 0 et 100 €.');
+  if (km !== '' && !inRange(km, 0, 1000)) setFieldError('km-field', 'Les km doivent être entre 0 et 1000.');
   if (form.querySelector('.has-error')) {
     focusFirstError(form);
     return;
@@ -451,6 +460,7 @@ document.querySelectorAll('input[name="vehicule"]').forEach((i) =>
   i.addEventListener('change', () => setFieldError('field-vehicule', null)));
 document.getElementById('centre-livraison-select').addEventListener('change', () => setFieldError('field-centre', null));
 document.getElementById('parking-montant-input').addEventListener('input', () => setFieldError('field-parking-montant', null));
+document.getElementById('km-input').addEventListener('input', () => setFieldError('km-field', null));
 
 // --- Plein ---
 
@@ -472,6 +482,7 @@ document.getElementById('form-plein').addEventListener('submit', async (e) => {
   clearFormErrors(form);
   if (!vehicule) setFieldError('field-vehicule-plein', 'Choisis le véhicule.');
   if (montant === '') setFieldError('field-montant-plein', 'Indique le montant du plein.');
+  else if (!inRange(montant, 0.01, 300)) setFieldError('field-montant-plein', 'Le montant doit être entre 0,01 et 300 €.');
   if (form.querySelector('.has-error')) {
     focusFirstError(form);
     return;
