@@ -146,8 +146,16 @@ app.post('/api/trajets/:id/finish', wrap(async (req, res) => {
     parkingPaye: parking,
     parkingMontant: parking ? parkingValue : null,
     centreLivraison: missionType === 'Livraison' ? centreLivraison : null,
-    km: kmValue === null ? null : Math.round(kmValue),
+    km: kmValue,
   });
+  if (result.error) {
+    return res.status(400).json(result);
+  }
+  res.json(result);
+}));
+
+app.post('/api/trajets/:id/cancel', wrap(async (req, res) => {
+  const result = await db.cancelTrajet(req.params.id);
   if (result.error) {
     return res.status(400).json(result);
   }

@@ -28,7 +28,7 @@ const state = { from: null, to: null, data: null, loadId: 0 };
 
 const pad = (n) => String(n).padStart(2, '0');
 const EUR = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' });
-const NUM = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 });
+const NUM = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 });
 const DAY_LABEL = new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: '2-digit', month: '2-digit' });
 const DAY_LONG = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
 const DAY_SHORT = new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: '2-digit' });

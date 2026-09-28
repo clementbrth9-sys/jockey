@@ -197,6 +197,19 @@ async function finishTrajet(id, details) {
   };
 }
 
+// Supprime un trajet demarre par erreur. Scope volontairement strict
+// (id + statut en_cours) : impossible d'effacer un trajet deja termine.
+async function cancelTrajet(id) {
+  const deleted = await client.execute({
+    sql: `DELETE FROM trajets WHERE id = ? AND status = 'en_cours'`,
+    args: [id],
+  });
+  if (deleted.rowsAffected === 0) {
+    return { error: 'TRAJET_INTROUVABLE' };
+  }
+  return { ok: true };
+}
+
 async function getTrajetsByDate(dateStr) {
   const result = await client.execute({
     sql: `SELECT * FROM trajets WHERE date = ? ORDER BY heureDebut ASC`,
@@ -250,6 +263,7 @@ module.exports = {
   getActiveTrajet,
   startTrajet,
   finishTrajet,
+  cancelTrajet,
   getTrajetsByDate,
   getTrajetsBetween,
   addPlein,

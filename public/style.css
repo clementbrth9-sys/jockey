@@ -323,6 +323,29 @@ body {
   transform: none;
 }
 
+.hero-link-danger {
+  display: block;
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 14px 0 0;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: center;
+}
+
+.hero-link-danger:active {
+  color: var(--color-danger);
+}
+
+.hero-link-danger:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 /* --- Quick actions (tuiles) --- */
 
 .quick-actions {

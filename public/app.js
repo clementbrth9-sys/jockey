@@ -48,6 +48,11 @@ function formatEuro(n) {
   return EUR.format(n || 0);
 }
 
+const KM = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 });
+function formatKm(n) {
+  return KM.format(n || 0);
+}
+
 const VEHICULE_LABELS = {
   'Relais Citiz': 'Relais Citiz',
   'Vehicule perso': 'Véhicule perso',
@@ -256,6 +261,7 @@ function errorMessage(err) {
   if (err.networkError) return 'Pas de connexion au serveur. Vérifie le réseau et réessaie.';
   if (err.message === 'VALEUR_INVALIDE') return 'Une valeur a été refusée. Vérifie les montants et les km.';
   if (err.message === 'TRAJET_DEJA_TERMINE') return 'Ce trajet a déjà été terminé.';
+  if (err.message === 'TRAJET_INTROUVABLE') return 'Ce trajet n\'existe plus.';
   return 'Une erreur est survenue, réessaie.';
 }
 
@@ -341,6 +347,7 @@ function renderTrajetCard() {
       <div class="hero-label">Trajet en cours</div>
       <div class="hero-timer" id="trajet-timer">00:00:00</div>
       <button id="btn-finish" class="hero-btn hero-btn-stop">${ICONS.square} Terminer le trajet</button>
+      <button id="btn-cancel-trajet" class="hero-link-danger">Annuler ce trajet (erreur de démarrage)</button>
     `;
     const debut = new Date(state.activeTrajet.heureDebut).getTime();
     const timerEl = document.getElementById('trajet-timer');
@@ -350,6 +357,7 @@ function renderTrajetCard() {
     tick();
     state.timerInterval = setInterval(tick, 1000);
     document.getElementById('btn-finish').addEventListener('click', onOpenFinish);
+    document.getElementById('btn-cancel-trajet').addEventListener('click', onCancelTrajet);
   } else {
     card.className = 'hero-card trajet-idle';
     card.innerHTML = `
@@ -374,6 +382,23 @@ async function onStartTrajet(e) {
     btn.disabled = false;
     btn.innerHTML = originalHTML;
     showToast('Impossible de démarrer le trajet. ' + errorMessage(err), { error: true });
+  }
+}
+
+async function onCancelTrajet(e) {
+  if (!state.activeTrajet) return;
+  if (!window.confirm('Annuler ce trajet en cours ? Il sera définitivement supprimé.')) return;
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  try {
+    await apiWithNetworkRetry(`/api/trajets/${state.activeTrajet.id}/cancel`, { method: 'POST' }, null);
+    state.activeTrajet = null;
+    renderTrajetCard();
+    refreshTrajetCounter().catch(() => {});
+    showToast('Trajet annulé.');
+  } catch (err) {
+    btn.disabled = false;
+    showToast('Impossible d\'annuler le trajet. ' + errorMessage(err), { error: true });
   }
 }
 
@@ -566,7 +591,7 @@ function renderJourSummary(trajets, pleins) {
   summary.innerHTML = `
     <div class="summary-row"><span class="summary-label">Nombre de trajets</span><span class="summary-value">${trajets.length}</span></div>
     <div class="summary-row"><span class="summary-label">Temps total en trajet</span><span class="summary-value">${formatDurationMin(totalMinutes)}</span></div>
-    <div class="summary-row"><span class="summary-label">Total km parcourus</span><span class="summary-value">${totalKm} km</span></div>
+    <div class="summary-row"><span class="summary-label">Total km parcourus</span><span class="summary-value">${formatKm(totalKm)} km</span></div>
     <div class="summary-row"><span class="summary-label">Total parking</span><span class="summary-value">${formatEuro(totalParking)}</span></div>
     <div class="summary-row"><span class="summary-label">Total pleins</span><span class="summary-value">${formatEuro(totalPleins)}</span></div>
   `;
@@ -615,7 +640,7 @@ function renderTimeline(trajets, pleins) {
             ${t.missionType === 'Livraison' && t.centreLivraison ? `<span>${ICONS.building} ${escapeHtml(t.centreLivraison)}</span>` : ''}
             ${t.vehicule ? `<span>${ICONS.car} ${labelVehicule(t.vehicule)}</span>` : ''}
             ${t.parkingPaye ? `<span>${ICONS.pin} ${formatEuro(t.parkingMontant)}</span>` : ''}
-            ${t.km ? `<span>${ICONS.ruler} ${t.km} km</span>` : ''}
+            ${t.km ? `<span>${ICONS.ruler} ${formatKm(t.km)} km</span>` : ''}
           </div>
         </div>
       `;
